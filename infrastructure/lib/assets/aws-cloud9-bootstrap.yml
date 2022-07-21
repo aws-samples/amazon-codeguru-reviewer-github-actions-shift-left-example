@@ -1,0 +1,137 @@
+schemaVersion: "2.2"
+description: Bootstrap AWS Cloud9 EC2 Instance
+mainSteps:
+- action: aws:runShellScript
+  name: BootstrappingIDE
+  inputs:
+    runCommand:
+    - "#!/bin/bash"
+
+    - echo '=== PREPARE ENV ==='
+    - date
+    - echo LANG=en_US.utf-8 >> /etc/environment
+    - echo LC_ALL=en_US.UTF-8 >> /etc/environment
+    - . /home/ec2-user/.bashrc
+
+    - echo '=== INSTALL CORE DEPENDENCIES ==='
+    - yum -y remove aws-cli
+    - yum -y install amazon-linux-extras
+    - yum -y install sqlite curl wget telnet jq strace git nc python3 python3-pip bash-completion
+    - yum -y install tar unzip gzip bzip2-devel ed gcc gcc-c++ gcc-gfortran less libcurl-devel
+    - yum -y install openssl openssl-devel readline-devel xz-devel zlib-devel glibc-static
+    - yum -y install libcxx libcxx-devel llvm-toolset-7 zlib-static
+
+    - echo '=== INSTALL AND CONFIGURE AWS CLI ==='
+    - sudo -i -u ec2-user bash -c "pip install --user -U boto boto3 botocore awscli aws-sam-cli"
+    - sudo -i -u ec2-user bash -c "pip3 install --user -U boto boto3 botocore awscli aws-sam-cli"
+
+    - export REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document/ | jq -r .region)
+    - mkdir -p /home/ec2-user/.aws
+    - echo '[default]' > /home/ec2-user/.aws/config
+    - echo "region = ${REGION}" >> /home/ec2-user/.aws/config
+    - echo 'output = json' >> /home/ec2-user/.aws/config
+    - chmod 600 /home/ec2-user/.aws/config
+    - rm -rf /home/ec2-user/.aws/credentials
+
+    - pip install boto boto3 botocore awscli aws-sam-cli
+    - pip3 install boto boto3 botocore awscli aws-sam-cli
+
+    - mkdir -p /root/.aws
+    - echo '[default]' > /root/.aws/config
+    - echo "region = ${REGION}" >> /root/.aws/config
+    - echo 'output = json' >> /root/.aws/config
+    - chmod 600 /root/.aws/config
+    - rm -rf /root/.aws/credentials
+
+    - echo '=== RESIZE DISK ==='
+    - |
+      SIZE=30
+      REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document/ | jq -r .region)
+      INSTANCEID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+      VOLUMEID=$(aws ec2 describe-instances \
+        --instance-id $INSTANCEID \
+        --query "Reservations[0].Instances[0].BlockDeviceMappings[0].Ebs.VolumeId" \
+        --output text --region $REGION)
+      aws ec2 modify-volume --volume-id $VOLUMEID --size $SIZE --region $REGION
+      while [ \
+        "$(aws ec2 describe-volumes-modifications \
+          --volume-id $VOLUMEID \
+          --filters Name=modification-state,Values="optimizing","completed" \
+          --query "length(VolumesModifications)"\
+          --output text --region $REGION)" != "1" ]; do
+      sleep 1
+      done
+      if [ $(readlink -f /dev/xvda) = "/dev/xvda" ]
+      then
+        sudo growpart /dev/xvda 1
+        STR=$(cat /etc/os-release)
+        SUB="VERSION_ID=\"2\""
+        if [[ "$STR" == *"$SUB"* ]]
+        then
+          sudo xfs_growfs -d /
+        else
+          sudo resize2fs /dev/xvda1
+        fi
+      else
+        sudo growpart /dev/nvme0n1 1
+        STR=$(cat /etc/os-release)
+        SUB="VERSION_ID=\"2\""
+        if [[ "$STR" == *"$SUB"* ]]
+        then
+          sudo xfs_growfs -d /
+        else
+          sudo resize2fs /dev/nvme0n1p1
+        fi
+      fi
+
+    - echo '=== INSTALL AND CONFIGURE MACHINE ==='
+    - echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.conf && sysctl -p
+
+    - echo '=== INSTALL AND CONFIGURE NODE.JS ==='
+    - sudo -i -u ec2-user bash -c 'source /home/ec2-user/.nvm/nvm.sh && nvm install 16.14.0'
+    - sudo -i -u ec2-user bash -c 'source /home/ec2-user/.nvm/nvm.sh && nvm use 16.14.0 && nvm alias default 16.14.0'
+
+    - sudo -i -u ec2-user bash -c 'npm install --force --global npm'
+    - sudo -i -u ec2-user bash -c 'npm install --force --global typescript aws-cdk'
+
+    - echo '=== INSTALL AND CONFIGURE JAVA AND ITS DEPENDENCIES ==='
+    - yum install -y java-11-amazon-corretto-headless
+
+    - GRADLE_VERSION=7.4.1
+    - GRADLE_URL="https://downloads.gradle-dn.com/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+    - mkdir -p /opt/gradle
+    - wget -O "/tmp/gradle-${GRADLE_VERSION}-bin.zip" "${GRADLE_URL}"
+    - unzip -d /opt/gradle "/tmp/gradle-${GRADLE_VERSION}-bin.zip"
+    - chown -R ec2-user:ec2-user /opt/gradle
+    - ln -s "/opt/gradle/gradle-${GRADLE_VERSION}/bin/gradle" /usr/bin/gradle
+
+    - MVN_URL="https://mirrors.ukfast.co.uk/sites/ftp.apache.org/maven"
+    - MVN_VERSION=3.6.3
+    - MVN_FOLDERNAME="apache-maven-${MVN_VERSION}"
+    - MVN_FILENAME="apache-maven-${MVN_VERSION}-bin.tar.gz"
+    - curl -4 -L "${MVN_URL}/maven-3/${MVN_VERSION}/binaries/${MVN_FILENAME}" | tar -xvz
+    - mv ${MVN_FOLDERNAME} /usr/lib/maven
+    - rm -rf ${MVN_FOLDERNAME}
+    - ln -s /usr/lib/maven/bin/mvn /usr/bin/mvn
+
+    - echo '=== INSTALL AND CONFIGURE DOCKER ==='
+    - yum install -y docker
+
+    - echo '=== CREATE REPOSITORIES DIRECTORY ==='
+    - mkdir -p /home/ec2-user/repositories/
+
+    - echo '=== CLONING REPOSITORIES ==='
+    - cd /home/ec2-user/repositories/ && git clone https://github.com/aws-samples/amazon-codeguru-reviewer-github-actions-shift-left-example
+
+    - echo '=== CLEANING EC2-USER ==='
+    - echo 'export PATH="$PATH:/usr/local/bin:/$HOME/.local/bin"' >> /home/ec2-user/.bashrc
+    - echo "complete -C '/usr/local/bin/aws_completer' aws" >> /home/ec2-user/.bash_profile
+
+    - rm -rf /home/ec2-user/environment/README.md
+
+    - chown -R ec2-user:ec2-user /home/ec2-user/
+
+    - echo '=== REBOOT ==='
+    - FILE=$(mktemp) && echo $FILE && echo '#!/bin/bash' > $FILE
+    - echo 'reboot -f --verbose' >> $FILE && at now + 1 minute -f $FILE
+    - echo "Bootstrap completed with return code $?"

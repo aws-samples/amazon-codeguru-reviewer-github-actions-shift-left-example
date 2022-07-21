@@ -1,0 +1,31 @@
+# Python virtualenv directory.
+.env/
+
+# Node.js dependencies.
+node_modules/
+
+# Java dependencies.
+build/
+.gradle/
+.settings/
+.classpath
+.project
+*.class
+
+# Python packaging.
+package/
+
+# macOS deps.
+.DS_Store/
+
+# IDEs.
+.vscode/
+.idea/
+
+# Archives.
+*.zip
+*.tar.gz
+
+# Temporary artifacts:
+.tmp/
+logs/

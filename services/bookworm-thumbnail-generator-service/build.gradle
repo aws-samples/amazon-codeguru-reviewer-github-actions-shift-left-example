@@ -1,0 +1,60 @@
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: MIT-0
+
+plugins {
+  id 'application'
+}
+
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation platform('software.amazon.awssdk:bom:2.17.186')
+  implementation 'software.amazon.awssdk:sqs'
+  implementation 'software.amazon.awssdk:s3'
+
+  implementation 'net.coobird:thumbnailator:0.4.17'
+
+  implementation 'org.apache.logging.log4j:log4j-api:2.17.2'
+  implementation 'org.apache.logging.log4j:log4j-core:2.17.2'
+
+  implementation 'commons-io:commons-io:2.11.0'
+
+  implementation 'com.fasterxml.jackson.core:jackson-core:2.13.2'
+  implementation 'com.fasterxml.jackson.core:jackson-annotations:2.13.2'
+  implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.2.2'
+
+  implementation 'org.slf4j:slf4j-api:1.7.36'
+  implementation 'org.slf4j:slf4j-simple:1.7.36'
+}
+
+application {
+  mainClass = 'bookworm.thumbnails.App'
+}
+
+task uberJar(type: Jar) {
+  manifest {
+    attributes(
+      'Main-Class': 'bookworm.thumbnails.App',
+      'Multi-Release': true
+    )
+  }
+
+  archiveClassifier = 'all'
+  duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+  from sourceSets.main.output
+
+  dependsOn configurations.runtimeClasspath
+  from {
+    configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect {
+      zipTree(it).matching() {
+        exclude '**/Log4j2Plugins.dat'
+      }
+    }
+  }
+}

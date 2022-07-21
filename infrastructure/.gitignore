@@ -1,0 +1,11 @@
+# Complication artifacts:
+*.js
+*.d.ts
+!.eslintrc.js
+
+# AWS CDK Context JSON file:
+cdk.context.json
+
+# CDK asset staging directory:
+.cdk.staging/
+cdk.out/

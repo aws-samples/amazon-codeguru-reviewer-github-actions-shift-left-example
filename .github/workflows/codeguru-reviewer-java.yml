@@ -1,0 +1,63 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+name: Amazon CodeGuru Reviewer integration through GitHub Actions (Java)
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  CodeGuru-Reviewer-Actions:
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required to interact with GitHub's OIDC Token endpoint.
+      id-token: write
+      # Required for Checkout action.
+      contents: read
+      # Required for CodeQL action (upload SARIF files).
+      security-events: write
+
+    steps:
+      # Checkout the repository.
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          # Required for CodeGuru Reviewer.
+          fetch-depth: 0 # Fetches all history for all branches and tags.
+
+      # Setup runtime (Amazon Corretto).
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '11'
+
+      # Build the project with dependencies.
+      - name: Build the project with dependencies
+        run: cd services && make bkwrm-thumbnail-generator-service
+
+      # Configure AWS Credentials.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_FOR_CODEGURU_TO_ASSUME_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Add CodeGuru Reviewer Action
+      - name: Amazon CodeGuru Reviewer
+        uses: aws-actions/codeguru-reviewer@v1.1
+        with:
+          # Overriding a proper workflow name for the Amazon CodeGuru CI/CD association with S3 bucket. Optional.
+          name: codeguru-reviewer-${{ github.event.sender.login }}-${{ github.event.repository.name }}
+          # Build artifacts directory with JAR files. Optional.
+          build_path: services/bookworm-thumbnail-generator-service/build/libs
+          # S3 Bucket to storing code artifacts. Required.
+          s3_bucket: ${{ secrets.AWS_CODEGURU_REVIEWER_S3_BUCKET }}
+
+      # Upload results to GitHub in order to present them in the UI.
+      - name: Upload review results
+        uses: github/codeql-action/upload-sarif@v1
+        with:
+          sarif_file: codeguru-results.sarif.json

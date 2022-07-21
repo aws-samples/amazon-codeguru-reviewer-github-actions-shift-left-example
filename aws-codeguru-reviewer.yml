@@ -1,0 +1,14 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+version: 1.0
+
+excludeFiles:
+  - 'services/bookworm-upload-cover/package/**'
+  - 'services/bookworm-upload-cover/*.zip'
+  - 'services/bookworm-thumbnail-generator-service/.gradle'
+  - 'services/bookworm-thumbnail-generator-service/gradle'
+  - 'services/bookworm-thumbnail-generator-service/agents'
+  - 'services/bookworm-thumbnail-generator-service/build'
+  - 'infrastructure/cdk.out/'
+  - 'infrastructure/node_modules/'

@@ -1,0 +1,60 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+name: Amazon ECR integration through GitHub Actions
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  Publish-Docker-Image:
+    runs-on: ubuntu-latest
+
+    permissions:
+      # Required to interact with GitHub's OIDC Token endpoint.
+      id-token: write
+      # Required for Checkout action.
+      contents: read
+      # Required for CodeQL action (upload SARIF files).
+      security-events: write
+
+    steps:
+      # Checkout the repository.
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      # Setup runtime (Amazon Corretto).
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'corretto'
+          java-version: '11'
+
+      # Build the project with dependencies.
+      - name: Build the project with dependencies
+        run: cd services && make bkwrm-thumbnail-generator-service
+
+      # Configure AWS Credentials.
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_FOR_ECR_TO_ASSUME_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Get authorization token for Amazon ECR.
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      # Main work related to building a Docker image and pushing it to the repository.
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          SERVICE_PATH: services/bookworm-thumbnail-generator-service
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.AWS_ECR_REPOSITORY_NAME }}
+        run: |
+          cd ${SERVICE_PATH}
+          docker build --rm -t ${ECR_REPOSITORY} .
+          docker tag ${ECR_REPOSITORY}:latest ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
