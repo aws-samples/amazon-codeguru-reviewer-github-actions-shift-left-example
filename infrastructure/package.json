@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@aws-cdk/aws-cloud9-alpha": "~2.23.0-alpha.0",
-    "aws-cdk-lib": "2.80.0",
+    "aws-cdk-lib": "2.185.0",
     "cdk-iam-floyd": "~0.351.0",
     "constructs": "~10.0.0",
     "js-yaml": "~4.1.0",
